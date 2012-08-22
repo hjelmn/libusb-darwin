@@ -132,6 +132,7 @@ struct linux_device_priv {
 
 struct linux_device_handle_priv {
 	int fd;
+	uint32_t caps;
 };
 
 enum reap_action {
@@ -1318,6 +1319,7 @@ static int op_open(struct libusb_device_handle *handle)
 {
 	struct linux_device_handle_priv *hpriv = _device_handle_priv(handle);
 	char filename[PATH_MAX];
+	int r;
 
 	_get_usbfs_path(handle->dev, filename);
 	usbi_dbg("opening %s", filename);
@@ -1338,6 +1340,20 @@ static int op_open(struct libusb_device_handle *handle)
 				"open failed, code %d errno %d", hpriv->fd, errno);
 			return LIBUSB_ERROR_IO;
 		}
+	}
+
+	r = ioctl(hpriv->fd, IOCTL_USBFS_GET_CAPABILITIES, &hpriv->caps);
+	if (r < 0) {
+		if (errno == ENOTTY)
+			usbi_dbg("%s: getcap not available", filename);
+		else
+			usbi_err(HANDLE_CTX(handle),
+				 "%s: getcap failed (%d)", filename, errno);
+		hpriv->caps = 0;
+		if (supports_flag_zero_packet)
+			hpriv->caps |= USBFS_CAP_ZERO_PACKET;
+		if (supports_flag_bulk_continuation)
+			hpriv->caps |= USBFS_CAP_BULK_CONTINUATION;
 	}
 
 	return usbi_add_pollfd(HANDLE_CTX(handle), hpriv->fd, POLLOUT);
@@ -1693,8 +1709,8 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 	if (tpriv->urbs)
 		return LIBUSB_ERROR_BUSY;
 
-	if (is_out && transfer->flags & LIBUSB_TRANSFER_ADD_ZERO_PACKET &&
-	    !supports_flag_zero_packet)
+	if (is_out && (transfer->flags & LIBUSB_TRANSFER_ADD_ZERO_PACKET) &&
+			!(dpriv->caps & USBFS_CAP_ZERO_PACKET))
 		return LIBUSB_ERROR_NOT_SUPPORTED;
 
 	/* usbfs places a 16kb limit on bulk URBs. we divide up larger requests
@@ -1730,7 +1746,7 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 		urb->endpoint = transfer->endpoint;
 		urb->buffer = transfer->buffer + (i * MAX_BULK_BUFFER_LENGTH);
                 /* don't set the short not ok flag for the last URB */
-		if (supports_flag_bulk_continuation && !is_out && i < num_urbs - 1)
+		if ((dpriv->caps & USBFS_CAP_BULK_CONTINUATION) && !is_out && i < num_urbs - 1)
 			urb->flags = USBFS_URB_SHORT_NOT_OK;
 		if (i == num_urbs - 1 && last_urb_partial)
 			urb->buffer_length = transfer->length % MAX_BULK_BUFFER_LENGTH;
@@ -1739,7 +1755,7 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 		else
 			urb->buffer_length = MAX_BULK_BUFFER_LENGTH;
 
-		if (i > 0 && supports_flag_bulk_continuation)
+		if (i > 0 && (dpriv->caps & USBFS_CAP_BULK_CONTINUATION))
 			urb->flags |= USBFS_URB_BULK_CONTINUATION;
 
 		/* we have already checked that the flag is supported */
