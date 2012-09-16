@@ -14,5 +14,5 @@ sam3u_benchmark_SOURCES = sam3u_benchmark.c
 noinst_PROGRAMS += sam3u_benchmark
 endif
 
-fxload_SOURCES = ezusb.c fxload.c
+fxload_SOURCES = ezusb.c ezusb.h fxload.c
 fxload_CFLAGS = $(THREAD_CFLAGS) $(AM_CFLAGS)

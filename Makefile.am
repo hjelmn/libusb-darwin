@@ -2,7 +2,8 @@ AUTOMAKE_OPTIONS = dist-bzip2 no-dist-gzip
 ACLOCAL_AMFLAGS = -I m4
 DISTCLEANFILES = libusb-1.0.pc
 MAINTAINERCLEANFILES = ChangeLog
-EXTRA_DIST = TODO PORTING msvc
+EXTRA_DIST = TODO PORTING msvc libusb/libusb-1.0.def \
+  examples/getopt/getopt.c examples/getopt/getopt1.c examples/getopt/getopt.h
 SUBDIRS = libusb doc
 
 if BUILD_EXAMPLES
@@ -25,4 +26,3 @@ dist-up: dist
 	cp $(distdir).tar.bz2 $(reldir)
 	rsync -rv $(reldir) frs.sourceforge.net:/home/frs/project/l/li/libusb/libusb-1.0/
 	rm -rf $(reldir)
-
