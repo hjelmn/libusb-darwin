@@ -1,7 +1,7 @@
 /* -*- Mode: C; indent-tabs-mode:nil -*- */
 /*
  * darwin backend for libusb 1.0
- * Copyright (C) 2008-2012 Nathan Hjelm <hjelmn@users.sourceforge.net>
+ * Copyright (C) 2008-2013 Nathan Hjelm <hjelmn@users.sourceforge.net>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,7 +20,6 @@
 
 #include <config.h>
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -50,13 +49,13 @@
 #include "darwin_usb.h"
 
 /* async event thread */
-static pthread_mutex_t libusb_darwin_at_mutex;
-static pthread_cond_t  libusb_darwin_at_cond;
+static pthread_mutex_t libusb_darwin_at_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  libusb_darwin_at_cond = PTHREAD_COND_INITIALIZER;
 
 static clock_serv_t clock_realtime;
 static clock_serv_t clock_monotonic;
 
-static CFRunLoopRef libusb_darwin_acfl = NULL; /* async cf loop */
+static CFRunLoopRef libusb_darwin_acfl = NULL; /* event cf loop */
 static volatile int32_t initCount = 0;
 
 /* async event thread */
@@ -67,6 +66,9 @@ static int darwin_claim_interface(struct libusb_device_handle *dev_handle, int i
 static int darwin_release_interface(struct libusb_device_handle *dev_handle, int iface);
 static int darwin_reset_device(struct libusb_device_handle *dev_handle);
 static void darwin_async_io_callback (void *refcon, IOReturn result, void *arg0);
+
+static int darwin_scan_devices(struct libusb_context *ctx);
+static int process_new_device (struct libusb_context *ctx, usb_device_t **device, UInt32 locationID);
 
 static const char *darwin_error_str (int result) {
   switch (result) {
@@ -158,7 +160,7 @@ static int ep_to_pipeRef(struct libusb_device_handle *dev_handle, uint8_t ep, ui
   return -1;
 }
 
-static int usb_setup_device_iterator (io_iterator_t *deviceIterator, long location) {
+static int usb_setup_device_iterator (io_iterator_t *deviceIterator, UInt32 location) {
   CFMutableDictionaryRef matchingDict = IOServiceMatching(kIOUSBDeviceClassName);
 
   if (!matchingDict)
@@ -170,7 +172,9 @@ static int usb_setup_device_iterator (io_iterator_t *deviceIterator, long locati
                                                                          &kCFTypeDictionaryValueCallBacks);
 
     if (propertyMatchDict) {
-      CFTypeRef locationCF = CFNumberCreate (NULL, kCFNumberLongType, &location);
+      /* there are no unsigned CFNumber types so treat the value as signed. the os seems to do this
+         internally (CFNumberType of locationID is 3) */
+      CFTypeRef locationCF = CFNumberCreate (NULL, kCFNumberSInt32Type, &location);
 
       CFDictionarySetValue (propertyMatchDict, CFSTR(kUSBDevicePropertyLocationID), locationCF);
       /* release our reference to the CFNumber (CFDictionarySetValue retains it) */
@@ -250,17 +254,35 @@ static kern_return_t darwin_get_device (uint32_t dev_location, usb_device_t ***d
   return kIOReturnSuccess;
 }
 
-static void darwin_devices_detached (void *ptr, io_iterator_t rem_devices) {
+static void darwin_devices_attached (void *ptr, io_iterator_t add_devices) {
   struct libusb_context *ctx;
-  struct libusb_device_handle *handle;
+  usb_device_t **device;
+  UInt32 location;
+
+  usbi_mutex_lock(&active_contexts_lock);
+
+  while ((device = usb_get_next_device (add_devices, &location))) {
+    /* add this device to each active context's device list */
+    list_for_each_entry(ctx, &active_contexts_list, list, struct libusb_context) {
+      process_new_device (ctx, device, location);
+    }
+
+    /* release extra reference */
+    (*device)->Release (device);
+  }
+
+  usbi_mutex_unlock(&active_contexts_lock);
+}
+
+static void darwin_devices_detached (void *ptr, io_iterator_t rem_devices) {
+  struct libusb_device *dev = NULL;
+  struct libusb_context *ctx;
   struct darwin_device_priv *dpriv;
-  struct darwin_device_handle_priv *priv;
 
   io_service_t device;
-  long location;
   bool locationValid;
+  UInt32 location;
   CFTypeRef locationCF;
-  UInt32 message;
 
   while ((device = IOIteratorNext (rem_devices)) != 0) {
     /* get the location from the i/o registry */
@@ -272,7 +294,7 @@ static void darwin_devices_detached (void *ptr, io_iterator_t rem_devices) {
       continue;
 
     locationValid = CFGetTypeID(locationCF) == CFNumberGetTypeID() &&
-            CFNumberGetValue(locationCF, kCFNumberLongType, &location);
+            CFNumberGetValue(locationCF, kCFNumberSInt32Type, &location);
 
     CFRelease (locationCF);
 
@@ -282,23 +304,17 @@ static void darwin_devices_detached (void *ptr, io_iterator_t rem_devices) {
     usbi_mutex_lock(&active_contexts_lock);
 
     list_for_each_entry(ctx, &active_contexts_list, list, struct libusb_context) {
-      usbi_mutex_lock(&ctx->open_devs_lock);
-
       usbi_dbg ("libusb/darwin.c darwin_devices_detached: notifying context %p of device disconnect", ctx);
 
-      list_for_each_entry(handle, &ctx->open_devs, list, struct libusb_device_handle) {
-        dpriv = (struct darwin_device_priv *)handle->dev->os_priv;
-
-        /* the device may have been opened several times. write to each handle's event descriptor */
-        if (dpriv->location == location  && handle->os_priv) {
-          priv  = (struct darwin_device_handle_priv *)handle->os_priv;
-
-          message = MESSAGE_DEVICE_GONE;
-          write (priv->fds[1], &message, sizeof (message));
-        }
+      dev = usbi_get_device_by_session_id (ctx, location);
+      if (!dev) {
+        continue;
       }
+      dpriv = (struct darwin_device_priv *) dev->os_priv;
 
-      usbi_mutex_unlock(&ctx->open_devs_lock);
+      /* signal the core that this device has been disconnected. the core will tear down this device
+         when the reference count reaches 0 */
+      usbi_disconnect_device (dev);
     }
 
     usbi_mutex_unlock(&active_contexts_lock);
@@ -312,7 +328,7 @@ static void darwin_clear_iterator (io_iterator_t iter) {
     IOObjectRelease (device);
 }
 
-static void *event_thread_main (void *arg0) {
+static void *darwin_event_thread_main (void *arg0) {
   IOReturn kresult;
   struct libusb_context *ctx = (struct libusb_context *)arg0;
   CFRunLoopRef runloop;
@@ -320,7 +336,7 @@ static void *event_thread_main (void *arg0) {
   /* Set this thread's name, so it can be seen in the debugger
      and crash reports. */
 #if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
-  pthread_setname_np ("org.libusb.device-detach");
+  pthread_setname_np ("org.libusb.device-hotplug");
 #endif
 
   /* Tell the Objective-C garbage collector about this thread.
@@ -331,10 +347,11 @@ static void *event_thread_main (void *arg0) {
   objc_registerThreadWithCollector();
 #endif
 
-  /* hotplug (device removal) source */
+  /* hotplug (device arrival/removal) sources */
   CFRunLoopSourceRef     libusb_notification_cfsource;
   io_notification_port_t libusb_notification_port;
   io_iterator_t          libusb_rem_device_iterator;
+  io_iterator_t          libusb_add_device_iterator;
 
   usbi_info (ctx, "creating hotplug event source");
 
@@ -358,12 +375,25 @@ static void *event_thread_main (void *arg0) {
     pthread_exit (NULL);
   }
 
+  /* create notifications for attached devices */
+  kresult = IOServiceAddMatchingNotification (libusb_notification_port, kIOFirstMatchNotification,
+                                              IOServiceMatching(kIOUSBDeviceClassName),
+                                              (IOServiceMatchingCallback)darwin_devices_attached,
+                                              (void *)ctx, &libusb_add_device_iterator);
+
+  if (kresult != kIOReturnSuccess) {
+    usbi_err (ctx, "could not add hotplug event source: %s", darwin_error_str (kresult));
+
+    pthread_exit (NULL);
+  }
+
   /* arm notifiers */
   darwin_clear_iterator (libusb_rem_device_iterator);
+  darwin_clear_iterator (libusb_add_device_iterator);
 
-  usbi_info (ctx, "thread ready to receive events");
+  usbi_info (ctx, "darwin event thread ready to receive events");
 
-  /* signal the main thread that the async runloop has been created. */
+  /* signal the main thread that the hotplug runloop has been created. */
   pthread_mutex_lock (&libusb_darwin_at_mutex);
   libusb_darwin_acfl = runloop;
   pthread_cond_signal (&libusb_darwin_at_cond);
@@ -372,11 +402,14 @@ static void *event_thread_main (void *arg0) {
   /* run the runloop */
   CFRunLoopRun();
 
-  usbi_info (ctx, "thread exiting");
+  usbi_info (ctx, "darwin event thread exiting");
 
   /* delete notification port */
   IONotificationPortDestroy (libusb_notification_port);
+
+  /* delete iterators */
   IOObjectRelease (libusb_rem_device_iterator);
+  IOObjectRelease (libusb_add_device_iterator);
 
   CFRelease (runloop);
 
@@ -387,6 +420,12 @@ static void *event_thread_main (void *arg0) {
 
 static int darwin_init(struct libusb_context *ctx) {
   host_name_port_t host_self;
+  int rc;
+
+  rc = darwin_scan_devices (ctx);
+  if (LIBUSB_SUCCESS != rc) {
+    return rc;
+  }
 
   if (OSAtomicIncrement32Barrier(&initCount) == 1) {
     /* create the clocks that will be used */
@@ -396,10 +435,7 @@ static int darwin_init(struct libusb_context *ctx) {
     host_get_clock_service(host_self, SYSTEM_CLOCK, &clock_monotonic);
     mach_port_deallocate(mach_task_self(), host_self);
 
-    pthread_mutex_init (&libusb_darwin_at_mutex, NULL);
-    pthread_cond_init (&libusb_darwin_at_cond, NULL);
-
-    pthread_create (&libusb_darwin_at, NULL, event_thread_main, (void *)ctx);
+    pthread_create (&libusb_darwin_at, NULL, darwin_event_thread_main, (void *)ctx);
 
     pthread_mutex_lock (&libusb_darwin_at_mutex);
     while (!libusb_darwin_acfl)
@@ -415,7 +451,7 @@ static void darwin_exit (void) {
     mach_port_deallocate(mach_task_self(), clock_realtime);
     mach_port_deallocate(mach_task_self(), clock_monotonic);
 
-    /* stop the async runloop and wait for the thread to terminate. */
+    /* stop the event runloop and wait for the thread to terminate. */
     CFRunLoopStop (libusb_darwin_acfl);
     pthread_join (libusb_darwin_at, NULL);
   }
@@ -701,29 +737,26 @@ static int darwin_cache_device_descriptor (struct libusb_context *ctx, struct li
   return 0;
 }
 
-static int process_new_device (struct libusb_context *ctx, usb_device_t **device, UInt32 locationID, struct discovered_devs **_discdevs) {
+static int process_new_device (struct libusb_context *ctx, usb_device_t **device, UInt32 locationID) {
+  struct libusb_device *dev = NULL;
   struct darwin_device_priv *priv;
-  struct libusb_device *dev;
-  struct discovered_devs *discdevs;
-  UInt16                address;
-  UInt8                 devSpeed;
-  int ret = 0, need_unref = 0;
+  UInt8 devSpeed;
+  UInt16 address;
+  int ret = 0;
 
   do {
-    dev = usbi_get_device_by_session_id(ctx, locationID);
-    if (!dev) {
-      usbi_info (ctx, "allocating new device for location 0x%08x", locationID);
-      dev = usbi_alloc_device(ctx, locationID);
-      need_unref = 1;
-    } else
-      usbi_info (ctx, "using existing device for location 0x%08x", locationID);
+    usbi_info (ctx, "allocating new device for location 0x%08x", locationID);
 
+    dev = usbi_alloc_device(ctx, locationID);
     if (!dev) {
-      ret = LIBUSB_ERROR_NO_MEM;
-      break;
+      return LIBUSB_ERROR_NO_MEM;
     }
 
     priv = (struct darwin_device_priv *)dev->os_priv;
+    priv->device = device;
+
+    /* increment the device's reference count (it is decremented in darwin_destroy_device) */
+    (*device)->AddRef (device);
 
     (*device)->GetDeviceAddress (device, (USBDeviceAddress *)&address);
 
@@ -761,25 +794,19 @@ static int process_new_device (struct libusb_context *ctx, usb_device_t **device
     if (ret < 0)
       break;
 
-    /* append the device to the list of discovered devices */
-    discdevs = discovered_devs_append(*_discdevs, dev);
-    if (!discdevs) {
-      ret = LIBUSB_ERROR_NO_MEM;
-      break;
-    }
-
-    *_discdevs = discdevs;
-
     usbi_info (ctx, "found device with address %d at %s", dev->device_address, priv->sys_path);
   } while (0);
 
-  if (need_unref)
-    libusb_unref_device(dev);
+  if (0 == ret) {
+    usbi_connect_device (dev);
+  } else {
+    libusb_unref_device (dev);
+  }
 
   return ret;
 }
 
-static int darwin_get_device_list(struct libusb_context *ctx, struct discovered_devs **_discdevs) {
+static int darwin_scan_devices(struct libusb_context *ctx) {
   io_iterator_t        deviceIterator;
   usb_device_t         **device;
   kern_return_t        kresult;
@@ -790,9 +817,11 @@ static int darwin_get_device_list(struct libusb_context *ctx, struct discovered_
     return darwin_to_libusb (kresult);
 
   while ((device = usb_get_next_device (deviceIterator, &location)) != NULL) {
-    (void) process_new_device (ctx, device, location, _discdevs);
+    (void) process_new_device (ctx, device, location);
 
-    (*(device))->Release(device);
+    /* process_new_device added a reference so we need to release the one
+       from QueryInterface */
+    (*device)->Release (device);
   }
 
   IOObjectRelease(deviceIterator);
@@ -852,6 +881,9 @@ static int darwin_open (struct libusb_device_handle *dev_handle) {
       /* add the cfSource to the aync run loop */
       CFRunLoopAddSource(libusb_darwin_acfl, priv->cfSource, kCFRunLoopCommonModes);
     }
+
+    /* add the cfSource to the aync run loop */
+    CFRunLoopAddSource(libusb_darwin_acfl, priv->cfSource, kCFRunLoopCommonModes);
   }
 
   /* device opened successfully */
@@ -959,9 +991,10 @@ static int darwin_set_configuration(struct libusb_device_handle *dev_handle, int
 
 static int darwin_get_interface (usb_device_t **darwin_device, uint8_t ifc, io_service_t *usbInterfacep) {
   IOUSBFindInterfaceRequest request;
-  uint8_t                   current_interface;
   kern_return_t             kresult;
   io_iterator_t             interface_iterator;
+  CFTypeRef                 bInterfaceNumberCF;
+  int                       bInterfaceNumber;
 
   *usbInterfacep = IO_OBJECT_NULL;
 
@@ -975,10 +1008,21 @@ static int darwin_get_interface (usb_device_t **darwin_device, uint8_t ifc, io_s
   if (kresult)
     return kresult;
 
-  for ( current_interface = 0 ; current_interface <= ifc ; current_interface++ ) {
-    *usbInterfacep = IOIteratorNext(interface_iterator);
-    if (current_interface != ifc)
-      (void) IOObjectRelease (*usbInterfacep);
+  while ((*usbInterfacep = IOIteratorNext(interface_iterator))) {
+    /* find the interface number */
+    bInterfaceNumberCF = IORegistryEntryCreateCFProperty (*usbInterfacep, CFSTR("bInterfaceNumber"),
+                                                          kCFAllocatorDefault, 0);
+    if (!bInterfaceNumberCF) {
+      continue;
+    }
+
+    CFNumberGetValue(bInterfaceNumberCF, kCFNumberIntType, &bInterfaceNumber);
+
+    if ((uint8_t) bInterfaceNumber == ifc) {
+      break;
+    }
+
+    (void) IOObjectRelease (*usbInterfacep);
   }
 
   /* done with the interface iterator */
@@ -1273,7 +1317,14 @@ static int darwin_detach_kernel_driver (struct libusb_device_handle *dev_handle,
 }
 
 static void darwin_destroy_device(struct libusb_device *dev) {
-  (void)dev;
+  struct darwin_device_priv *dpriv = (struct darwin_device_priv *) dev->os_priv;
+
+  if (dpriv->device) {
+    /* it is an internal error if the reference count of a device is < 0 after release */
+    assert(0 <= (*(dpriv->device))->Release(dpriv->device));
+
+    dpriv->device = NULL;
+  }
 }
 
 static int submit_bulk_transfer(struct usbi_transfer *itransfer) {
@@ -1661,12 +1712,8 @@ static int op_handle_events(struct libusb_context *ctx, struct pollfd *fds, POLL
       ret = read (hpriv->fds[0], &message, sizeof (message));
       if (ret < (ssize_t)sizeof (message))
         continue;
-    } else
+    } else {
       /* could not poll the device-- response is to delete the device (this seems a little heavy-handed) */
-      message = MESSAGE_DEVICE_GONE;
-
-    switch (message) {
-    case MESSAGE_DEVICE_GONE:
       /* remove the device's async port from the runloop */
       if (hpriv->cfSource) {
         if (libusb_darwin_acfl)
@@ -1679,7 +1726,9 @@ static int op_handle_events(struct libusb_context *ctx, struct pollfd *fds, POLL
       usbi_handle_disconnect(handle);
 
       /* done with this device */
-      continue;
+    }
+
+    switch (message) {
     case MESSAGE_ASYNC_IO_COMPLETE:
       read (hpriv->fds[0], &itransfer, sizeof (itransfer));
       read (hpriv->fds[0], &kresult, sizeof (IOReturn));
@@ -1726,7 +1775,7 @@ const struct usbi_os_backend darwin_backend = {
         .name = "Darwin",
         .init = darwin_init,
         .exit = darwin_exit,
-        .get_device_list = darwin_get_device_list,
+        .get_device_list = NULL, /* not needed */
         .get_device_descriptor = darwin_get_device_descriptor,
         .get_active_config_descriptor = darwin_get_active_config_descriptor,
         .get_config_descriptor = darwin_get_config_descriptor,
