@@ -1,6 +1,6 @@
 INCLUDES = -I$(top_srcdir)/libusb
 LDADD = ../libusb/libusb-1.0.la
-noinst_PROGRAMS = listdevs
+noinst_PROGRAMS = listdevs hotplugtest
 
 if HAVE_SIGACTION
 noinst_PROGRAMS += dpfp

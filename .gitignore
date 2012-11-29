@@ -28,6 +28,7 @@ examples/listdevs
 examples/dpfp
 examples/dpfp_threaded
 examples/sam3u_benchmark
+examples/hotplugtest
 *.exe
 *.pc
 ChangeLog

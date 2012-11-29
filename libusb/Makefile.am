@@ -41,9 +41,8 @@ libusb_1_0_la_CFLAGS = $(AM_CFLAGS) \
 	-DLIBUSB_DESCRIBE=\"`git --git-dir "$(top_srcdir)/.git" describe --tags 2>/dev/null`\"
 libusb_1_0_la_LDFLAGS = $(LTLDFLAGS)
 libusb_1_0_la_SOURCES = libusbi.h core.c descriptor.c io.c sync.c $(OS_SRC) \
-	os/linux_usbfs.h os/darwin_usb.h os/windows_usb.h \
-	$(THREADS_SRC) \
-	os/poll_posix.h os/poll_windows.h
+	hotplug.h hotplug.c os/linux_usbfs.h os/darwin_usb.h os/windows_usb.h \
+	$(THREADS_SRC) os/poll_posix.h os/poll_windows.h
 
 hdrdir = $(includedir)/libusb-1.0
 hdr_HEADERS = libusb.h

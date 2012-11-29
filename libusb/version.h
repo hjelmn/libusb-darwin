@@ -6,7 +6,7 @@
 #define LIBUSB_MINOR 0
 #endif
 #ifndef LIBUSB_MICRO
-#define LIBUSB_MICRO 9
+#define LIBUSB_MICRO 15
 #endif
 /* LIBUSB_NANO may be used for Windows internal versioning. 0 means unused. */
 #ifndef LIBUSB_NANO
