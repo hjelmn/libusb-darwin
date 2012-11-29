@@ -136,4 +136,23 @@ struct usbfs_hub_portinfo {
 #define IOCTL_USBFS_DISCONNECT	_IO('U', 22)
 #define IOCTL_USBFS_CONNECT	_IO('U', 23)
 
+#if defined(HAVE_LIBUDEV)
+int linux_udev_start_event_monitor(void);
+int linux_udev_stop_event_monitor(void);
+int linux_udev_scan_devices(struct libusb_context *ctx);
+#else
+int linux_netlink_start_event_monitor(void);
+int linux_netlink_stop_event_monitor(void);
+#endif
+
+void linux_hotplug_enumerate(uint8_t busnum, uint8_t devaddr, const char *sys_name);
+void linux_hotplug_disconnected(uint8_t busnum, uint8_t devaddr, const char *sys_name);
+
+int linux_get_device_address (struct libusb_context *ctx, int detached,
+			      uint8_t *busnum, uint8_t *devaddr,
+			      const char *dev_node, const char *sys_name);
+int linux_enumerate_device(struct libusb_context *ctx,
+			   uint8_t busnum, uint8_t devaddr,
+			   const char *sysfs_dir);
+
 #endif
