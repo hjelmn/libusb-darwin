@@ -2,7 +2,7 @@
  * Public libusb header file
  * Copyright (C) 2007-2008 Daniel Drake <dsd@gentoo.org>
  * Copyright (c) 2001 Johannes Erdfelt <johannes@erdfelt.com>
- * Copyright (C) 2012 Nathan Hjelm <hjelmn@cs.unm.edu>
+ * Copyright (C) 2012-2013 Nathan Hjelm <hjelmn@cs.unm.edu>
  * Copyright (C) 2012 Peter Stuge <peter@stuge.se>
  *
  * This library is free software; you can redistribute it and/or
@@ -1686,7 +1686,7 @@ typedef int libusb_hotplug_callback_handle;
 /** \ingroup hotplug
  * Flags for hotplug events */
 typedef enum {
-	/** Arm the callback and fire it for all matching attached devices. */
+	/** Arm the callback and fire it for all matching currently attached devices. */
 	LIBUSB_HOTPLUG_ENUMERATE = 1,
 } libusb_hotplug_flag;
 
