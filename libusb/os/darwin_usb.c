@@ -21,13 +21,10 @@
 #include <config.h>
 #include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <libkern/OSAtomic.h>
@@ -41,10 +38,6 @@
 #if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
   #include <objc/objc-auto.h>
 #endif
-
-#include <IOKit/IOCFBundle.h>
-#include <IOKit/usb/IOUSBLib.h>
-#include <IOKit/IOCFPlugIn.h>
 
 #include "darwin_usb.h"
 
