@@ -1729,7 +1729,8 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 		urb->type = urb_type;
 		urb->endpoint = transfer->endpoint;
 		urb->buffer = transfer->buffer + (i * MAX_BULK_BUFFER_LENGTH);
-		if (supports_flag_bulk_continuation && !is_out)
+                /* don't set the short not ok flag for the last URB */
+		if (supports_flag_bulk_continuation && !is_out && i < num_urbs - 1)
 			urb->flags = USBFS_URB_SHORT_NOT_OK;
 		if (i == num_urbs - 1 && last_urb_partial)
 			urb->buffer_length = transfer->length % MAX_BULK_BUFFER_LENGTH;
