@@ -1056,6 +1056,8 @@ static int init_device(struct libusb_device* dev, struct libusb_device* parent_d
 		force_hcd_device_descriptor(dev);
 	}
 
+	usbi_sanitize_device(dev);
+
 	usbi_dbg("(bus: %d, addr: %d, depth: %d, port: %d): '%s'",
 		dev->bus_number, dev->device_address, priv->depth, priv->port, device_id);
 
