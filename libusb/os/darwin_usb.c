@@ -1365,11 +1365,12 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer) {
   struct darwin_transfer_priv *tpriv = usbi_transfer_get_os_priv(itransfer);
   struct darwin_device_handle_priv *priv = (struct darwin_device_handle_priv *)transfer->dev_handle->os_priv;
 
-  IOReturn                kresult;
-  uint8_t                 pipeRef, iface;
-  UInt64                  frame;
-  AbsoluteTime            atTime;
-  int                     i;
+  IOReturn kresult;
+  uint8_t direction, number, interval, pipeRef, iface, transferType;
+  uint16_t maxPacketSize;
+  UInt64 frame;
+  AbsoluteTime atTime;
+  int i;
 
   struct darwin_interface *cInterface;
 
@@ -1399,6 +1400,10 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer) {
 
   cInterface = &priv->interfaces[iface];
 
+  /* determine the properties of this endpoint and the speed of the device */
+  (*(cInterface->interface))->GetPipeProperties (cInterface->interface, pipeRef, &direction, &number,
+                                                 &transferType, &maxPacketSize, &interval);
+
   /* Last but not least we need the bus frame number */
   kresult = (*(cInterface->interface))->GetBusFrameNumber(cInterface->interface, &frame, &atTime);
   if (kresult) {
@@ -1425,7 +1430,12 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer) {
                                                               transfer->num_iso_packets, tpriv->isoc_framelist, darwin_async_io_callback,
                                                               itransfer);
 
-  cInterface->frames[transfer->endpoint] = frame + transfer->num_iso_packets / 8;
+  if (LIBUSB_SPEED_FULL == transfer->dev_handle->dev->speed)
+    /* Full speed */
+    cInterface->frames[transfer->endpoint] = frame + transfer->num_iso_packets * (1 << (interval - 1));
+  else
+    /* High/super speed */
+    cInterface->frames[transfer->endpoint] = frame + transfer->num_iso_packets * (1 << (interval - 1)) / 8;
 
   if (kresult != kIOReturnSuccess) {
     usbi_err (TRANSFER_CTX (transfer), "isochronous transfer failed (dir: %s): %s", IS_XFERIN(transfer) ? "In" : "Out",
