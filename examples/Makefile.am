@@ -1,6 +1,6 @@
 AM_CPPFLAGS = -I$(top_srcdir)/libusb
 LDADD = ../libusb/libusb-1.0.la
-noinst_PROGRAMS = listdevs hotplugtest
+noinst_PROGRAMS = listdevs hotplugtest testlibusb1
 
 if HAVE_SIGACTION
 noinst_PROGRAMS += dpfp
