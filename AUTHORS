@@ -1,6 +1,6 @@
 Copyright (C) 2007-2009 Daniel Drake <dsd@gentoo.org>
 Copyright (c) 2001 Johannes Erdfelt <johannes@erdfelt.com>
-Copyright (C) 2008-2012 Nathan Hjelm <hjelmn@users.sourceforge.net>
+Copyright (C) 2008-2013 Nathan Hjelm <hjelmn@users.sourceforge.net>
 Copyright (C) 2009-2012 Pete Batard <pete@akeo.ie>
 Copyright (C) 2010 Michael Plante <michael.plante@gmail.com>
 Copyright (C) 2010-2012 Peter Stuge <peter@stuge.se>
@@ -28,6 +28,7 @@ Konrad Rzepecki
 Ludovic Rousseau
 Martin Koegler
 Martin Pieuchot
+Maya Erez
 Mike Frysinger
 Mikhail Gusarov
 Orin Eman
