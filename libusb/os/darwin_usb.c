@@ -64,6 +64,7 @@ static void darwin_async_io_callback (void *refcon, IOReturn result, void *arg0)
 static int darwin_scan_devices(struct libusb_context *ctx);
 static int process_new_device (struct libusb_context *ctx, usb_device_t **device, UInt32 locationID);
 
+#if defined(ENABLE_LOGGING)
 static const char *darwin_error_str (int result) {
   switch (result) {
   case kIOReturnSuccess:
@@ -96,6 +97,7 @@ static const char *darwin_error_str (int result) {
     return "unknown error";
   }
 }
+#endif
 
 static int darwin_to_libusb (int result) {
   switch (result) {
