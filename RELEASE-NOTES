@@ -1,3 +1,43 @@
+libusb 1.0.16 Release Notes:
+
+April 10, 2013
+
+Changes since 1.0.9:
+
+ - Hotplug support! This new API is currently supported by the Linux
+   and Darwin backends. There is no hotplug support for either Windows
+   or NetBSD at this time.
+
+ - Support for parsing USB 3.0 descriptors: Binary Object Store (BOS),
+   USB SuperSpeed endpoint companion. The interface is API compatible with
+   the FreeBSD libusb interface.
+
+ - Fix #142: Spurious short packet errors received because SHORT_NOT_OK flag
+   is always turned on.
+
+ - Fix #151: darwin: reduce the number of retries in enumeration
+
+ - Fix #150: darwin: do not try to unsuspend Apple devices
+
+ - Fix #148: Use Android logging when building on Android
+
+ - Fix #137: take advantage of new kernel support for large transfers
+
+ - Fix #165: Darwin: submit_iso_transfer() assumes HS device.
+
+ - Fix #159: Build with automake-1.13 broken
+
+ - Fix #153: darwin: use Release instead of IODestroyPlugInInterface to avoid
+   stopping IOServices associated with a device
+
+ - Fix #147: Access violation in usbi_log_v when no default context is set
+
+ - Fix #139: libusb 1.0.9 on Mac OS X keyboard and mouse blocked
+
+A special thanks to Xiaofan Chen and others in the community for helping
+find and fix bugs!
+
+
 libusb 1.0.9
 
 This release has taken much too long to finish, but this also means that it
