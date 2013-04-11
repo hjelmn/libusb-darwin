@@ -1,3 +1,4 @@
+/* -*- Mode: C; indent-tabs-mode:nil ; c-basic-offset:8 -*- */
 /*
  * Core functions for libusb
  * Copyright (c) 2012-2013 Nathan Hjelm <hjelmn@cs.unm.edu>
@@ -1974,6 +1975,51 @@ DEFAULT_VISIBILITY const char * LIBUSB_CALL libusb_error_name(int error_code)
 		return "LIBUSB_ERROR_OTHER";
 	}
 	return "**UNKNOWN**";
+}
+
+/** \ingroup misc
+ * Returns a constant string with an English short description of the given
+ * error code. The caller should never free() the returned pointer since it
+ * points to a constant string.
+ * The returned string is encoded in ASCII form and always starts with a capital 
+ * letter and ends without any dot.
+ * \param errcode the error code whose description is desired
+ * \returns a short description of the error code in English
+ */
+API_EXPORTED const char* libusb_strerror(enum libusb_error errcode)
+{
+	switch (errcode) {
+	case LIBUSB_SUCCESS:
+		return "Success";
+	case LIBUSB_ERROR_IO:
+		return "Input/output error";
+	case LIBUSB_ERROR_INVALID_PARAM:
+		return "Invalid parameter";
+	case LIBUSB_ERROR_ACCESS:
+		return "Access denied (insufficient permissions)";
+	case LIBUSB_ERROR_NO_DEVICE:
+		return "No such device (it may have been disconnected)";
+	case LIBUSB_ERROR_NOT_FOUND:
+		return "Entity not found";
+	case LIBUSB_ERROR_BUSY:
+		return "Resource busy";
+	case LIBUSB_ERROR_TIMEOUT:
+		return "Operation timed out";
+	case LIBUSB_ERROR_OVERFLOW:
+		return "Overflow";
+	case LIBUSB_ERROR_PIPE:
+		return "Pipe error";
+	case LIBUSB_ERROR_INTERRUPTED:
+		return "System call interrupted (perhaps due to signal)";
+	case LIBUSB_ERROR_NO_MEM:
+		return "Insufficient memory";
+	case LIBUSB_ERROR_NOT_SUPPORTED:
+		return "Operation not supported or unimplemented on this platform";
+	case LIBUSB_ERROR_OTHER:
+		return "Other error";
+	}
+
+	return "Unknown error";
 }
 
 /** \ingroup misc

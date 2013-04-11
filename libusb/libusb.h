@@ -921,6 +921,7 @@ enum libusb_capability_type {
  * Error codes. Most libusb functions return 0 on success or one of these
  * codes on failure.
  * You can call \ref libusb_error_name() to retrieve a string representation
+ * of an error code or \ret libusb_strerror() to get an english description
  * of an error code.
  */
 enum libusb_error {
@@ -963,8 +964,8 @@ enum libusb_error {
 	/** Operation not supported or unimplemented on this platform */
 	LIBUSB_ERROR_NOT_SUPPORTED = -12,
 
-	/* NB! Remember to update libusb_error_name()
-	   when adding new error codes here. */
+	/* NB! Remember to update libusb_error_name() and
+	   libusb_strerror() when adding new error codes here. */
 
 	/** Other error */
 	LIBUSB_ERROR_OTHER = -99,
@@ -1146,6 +1147,7 @@ void LIBUSB_CALL libusb_set_debug(libusb_context *ctx, int level);
 const struct libusb_version * LIBUSB_CALL libusb_get_version(void);
 int LIBUSB_CALL libusb_has_capability(uint32_t capability);
 const char * LIBUSB_CALL libusb_error_name(int errcode);
+const char * LIBUSB_CALL libusb_strerror(enum libusb_error errcode);
 
 ssize_t LIBUSB_CALL libusb_get_device_list(libusb_context *ctx,
 	libusb_device ***list);
