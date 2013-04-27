@@ -27,7 +27,7 @@
 int done = 0;
 libusb_device_handle *handle;
 
-int hotplug_callback (libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) {
+static int hotplug_callback (libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) {
   struct libusb_device_descriptor desc;
   int rc;
 
@@ -45,7 +45,7 @@ int hotplug_callback (libusb_context *ctx, libusb_device *dev, libusb_hotplug_ev
   return 0;
 }
 
-int hotplug_callback_detach (libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) {
+static int hotplug_callback_detach (libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) {
   printf ("Device detached\n");
 
   libusb_close (handle);
