@@ -1,3 +1,4 @@
+/* -*- Mode: C; indent-tabs-mode:t ; c-basic-offset:8 -*- */
 /*
  * USB descriptor handling functions for libusb
  * Copyright (C) 2007 Daniel Drake <dsd@gentoo.org>
@@ -799,7 +800,7 @@ void API_EXPORTED libusb_free_ss_endpoint_comp(struct libusb_ss_endpoint_compani
 }
 
 int API_EXPORTED libusb_parse_bos_descriptor(const void *buf, int len,
-                                             struct libusb_bos_descriptor **bos)
+					     struct libusb_bos_descriptor **bos)
 {
 	const unsigned char *buffer = (const unsigned char *) buf;
 	struct libusb_bos_descriptor *bos_desc;

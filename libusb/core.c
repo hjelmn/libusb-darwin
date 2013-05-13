@@ -1,4 +1,4 @@
-/* -*- Mode: C; indent-tabs-mode:nil ; c-basic-offset:8 -*- */
+/* -*- Mode: C; indent-tabs-mode:t ; c-basic-offset:8 -*- */
 /*
  * Core functions for libusb
  * Copyright (c) 2012-2013 Nathan Hjelm <hjelmn@cs.unm.edu>
@@ -548,8 +548,8 @@ struct libusb_device *usbi_alloc_device(struct libusb_context *ctx,
 
 void usbi_connect_device(struct libusb_device *dev)
 {
-        libusb_hotplug_message message = {LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED, dev};
-        int ret;
+	libusb_hotplug_message message = {LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED, dev};
+	int ret;
 
 	dev->attached = 1;
 
@@ -557,37 +557,37 @@ void usbi_connect_device(struct libusb_device *dev)
 	list_add(&dev->list, &dev->ctx->usb_devs);
 	usbi_mutex_unlock(&dev->ctx->usb_devs_lock);
 
-        /* Signal that an event has occurred for this device if we support hotplug AND
-           the hotplug pipe is ready. This prevents an event from getting raised during
-           initial enumeration. */
+	/* Signal that an event has occurred for this device if we support hotplug AND
+	   the hotplug pipe is ready. This prevents an event from getting raised during
+	   initial enumeration. */
 	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG) && dev->ctx->hotplug_pipe[1] > 0) {
-                ret = usbi_write(dev->ctx->hotplug_pipe[1], &message, sizeof (message));
-                if (sizeof (message) != ret) {
-                        usbi_err(DEVICE_CTX(dev), "error writing hotplug message");
-                }
-        }
+		ret = usbi_write(dev->ctx->hotplug_pipe[1], &message, sizeof (message));
+		if (sizeof (message) != ret) {
+			usbi_err(DEVICE_CTX(dev), "error writing hotplug message");
+		}
+	}
 }
 
 void usbi_disconnect_device(struct libusb_device *dev)
 {
-        libusb_hotplug_message message = {LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT, dev};
+	libusb_hotplug_message message = {LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT, dev};
 	struct libusb_context *ctx = dev->ctx;
-        int ret;
+	int ret;
 
 	usbi_mutex_lock(&dev->lock);
 	dev->attached = 0;
 	usbi_mutex_unlock(&dev->lock);
 
-        /* Signal that an event has occurred for this device if we support hotplug AND
-           the hotplug pipe is ready. This prevents an event from getting raised during
-           initial enumeration. libusb_handle_events will take care of dereferencing the
-           device. */
+	/* Signal that an event has occurred for this device if we support hotplug AND
+	   the hotplug pipe is ready. This prevents an event from getting raised during
+	   initial enumeration. libusb_handle_events will take care of dereferencing the
+	   device. */
 	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG) && dev->ctx->hotplug_pipe[1] > 0) {
-                ret = usbi_write(dev->ctx->hotplug_pipe[1], &message, sizeof (message));
-                if (sizeof(message) != ret) {
-                        usbi_err(DEVICE_CTX(dev), "error writing hotplug message");
-                }
-        }
+		ret = usbi_write(dev->ctx->hotplug_pipe[1], &message, sizeof (message));
+		if (sizeof(message) != ret) {
+			usbi_err(DEVICE_CTX(dev), "error writing hotplug message");
+		}
+	}
 
 	usbi_mutex_lock(&ctx->usb_devs_lock);
 	list_del(&dev->list);
@@ -1116,7 +1116,7 @@ static void do_close(struct libusb_context *ctx,
 	/* safe iteration because transfers may be being deleted */
 	list_for_each_entry_safe(itransfer, tmp, &ctx->flying_transfers, list, struct usbi_transfer) {
 		struct libusb_transfer *transfer =
-		        USBI_TRANSFER_TO_LIBUSB_TRANSFER(itransfer);
+			USBI_TRANSFER_TO_LIBUSB_TRANSFER(itransfer);
 
 		if (transfer->dev_handle != dev_handle)
 			continue;
@@ -1700,12 +1700,12 @@ int API_EXPORTED libusb_init(libusb_context **context)
 	}
 
 	usbi_dbg("libusb-%d.%d.%d%s%s%s",
-	         libusb_version_internal.major,
-	         libusb_version_internal.minor,
-	         libusb_version_internal.micro,
-	         libusb_version_internal.rc,
-	         libusb_version_internal.describe[0] ? " git:" : "",
-	         libusb_version_internal.describe);
+		 libusb_version_internal.major,
+		 libusb_version_internal.minor,
+		 libusb_version_internal.micro,
+		 libusb_version_internal.rc,
+		 libusb_version_internal.describe[0] ? " git:" : "",
+		 libusb_version_internal.describe);
 
 	usbi_mutex_init(&ctx->usb_devs_lock, NULL);
 	usbi_mutex_init(&ctx->open_devs_lock, NULL);
